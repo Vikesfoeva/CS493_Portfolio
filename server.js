@@ -23,3 +23,52 @@ app.listen(PORT, () => {
 app.get('/', async (req, res) => {
     res.send('Hello World');
 });
+
+// Authenticate via Auth0
+// See the method I used in assignment 7
+// You must have a User entity in your database which stores at least the unique user ID of each user of your application.
+// The first time someone logs in and generates a JWT in your app they must be added as a user in the User entity of your database.
+
+// GET All Pilots
+// You must provide an unprotected endpoint GET /users that returns all the users currently registered in the app, even 
+// if they don't currently have any relationship with a non-user entity. The response does not need to be paginated.
+
+
+// All protected
+// GET All Planes
+// The collection URL for an entity must implement pagination showing 5 entities at a time
+// At a minimum it must have a 'next' link on every page except the last
+// The collection must include a property that indicates how many total items are in the collection
+
+// GET One Plane
+
+// POST a Plane
+
+// PUT a Plane
+
+// Patch a Plane
+
+// DELETE a Plane
+
+
+// All protected
+// GET All Ticket
+// The collection URL for an entity must implement pagination showing 5 entities at a time
+// At a minimum it must have a 'next' link on every page except the last
+// The collection must include a property that indicates how many total items are in the collection
+
+// GET One Ticket
+
+// POST a Ticket
+
+// PUT a Ticket
+
+// Patch a Ticket
+
+// DELETE a Ticket
+
+
+
+// PUT Passenger onto a plane
+
+// DELETE Passenger from a Plane
