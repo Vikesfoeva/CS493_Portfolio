@@ -7,12 +7,19 @@
 const {Datastore} = require('@google-cloud/datastore');
 const datastore = new Datastore();
 
+const jwt_decode = require('jwt-decode');
+
 const express = require('express');
 const app = express();
+const path = require('path');
 
 const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+const BASEURL = 'https://lenzb-cs493-portfolio.ue.r.appspot.com/';
+
+const { auth, requiresAuth } = require('express-openid-connect');
 
 // Listen to the App Engine-specified port, or 8080 otherwise
 const PORT = process.env.PORT || 8080;
@@ -20,9 +27,43 @@ app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}...`);
 });
 
-app.get('/', async (req, res) => {
-    res.send('Hello World');
+// AUTH 0 Start
+// const releaseURL = 'https://lenzb-cs493-assignment7.ue.r.appspot.com/';
+const releaseURL = 'http://localhost:8080/';
+
+const thisClientSecret = 'y0F6qLWTkdd6ihhbF_zM1r1qTHzpIPMzJ25I4fxLCtss03_iGts22fB-vdzGxLZu'
+const thisClientID = 'Nq6qNkJA5CEVqGoevLBsbRuyx7o3ZACb';
+const config = {
+    authRequired: false,
+    auth0Logout: true,
+    secret: thisClientSecret,
+    baseURL: releaseURL,
+    clientID: thisClientID,
+    issuerBaseURL: 'https://dev-ovs150jfxgfxrydj.us.auth0.com'
+};
+
+// auth router attaches /login, /logout, and /callback routes to the baseURL
+app.use(auth(config));
+
+// req.isAuthenticated is provided from the auth router
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, './index.html'));
 });
+
+app.get('/checkAuthentication', (req, res) => {
+    res.send(
+        {"value": req.oidc.isAuthenticated() ? 'Logged in' : 'Logged out'}
+    );
+});
+
+app.get('/profile', requiresAuth(), async (req, res) => {
+    res.send({
+        "profile": req.oidc.user,
+        "jwt_Token": req.appSession.id_token
+    });
+});
+
+// AUTH O END
 
 // Authenticate via Auth0
 // See the method I used in assignment 7
@@ -43,6 +84,50 @@ app.get('/', async (req, res) => {
 // GET One Plane
 
 // POST a Plane
+app.post('/planes', async (req, res) => {
+  const newKey = datastore.key('planes');
+  const reqCap = req.body.capacity;
+  const reqSerial = req.body.serialNumber;
+  const reqType = req.body.type;
+  const bearerToken = req.headers.authorization;
+
+  const checkIsValid = await checkInvalidJWT(bearerToken);
+  if (checkIsValid[0]) {
+      const error = {"Error": "Missing or invalid JWT"};
+      res.status(401);
+      return res.send(error);
+  }
+
+  const reqOwner = checkIsValid[1];
+
+  if (reqCap === undefined || reqSerial === undefined || reqType === undefined) {
+      const error = {"Error":  "The request object is missing at least one of the required attributes"}
+      res.status(400);
+      return res.send(error);
+  } else {
+      const newEntry = {
+          key: newKey,
+          data: {
+              capacity: reqCap,
+              owner: reqType,
+              serialNumber: reqSerial,
+              type: reqOwner
+          }
+      }
+      const response = await datastore.save(newEntry);
+      const newId = parseInt(response[0]['mutationResults'][0]['key']['path'][0]['id']);
+      const newEntryRes = {
+          id: newId,
+          capacity: reqCap,
+          owner: reqType,
+          serialNumber: reqSerial,
+          type: reqOwner,
+          self: BASEURL + 'planes/' + newId
+      }
+      res.status(201);
+      return res.send(newEntryRes);
+  }
+});
 
 // PUT a Plane
 
@@ -72,3 +157,19 @@ app.get('/', async (req, res) => {
 // PUT Passenger onto a plane
 
 // DELETE Passenger from a Plane
+
+async function checkInvalidJWT(inputJwt) {
+  // Decode the JWT to check validity
+  // https://www.npmjs.com/package/jwt-decode
+  // Returns [isInvalid as true or false, owner name]
+  try {
+      const tokenComponent = inputJwt.split(" ")[1];
+      const decoded = jwt_decode(tokenComponent);
+      const out = [false, decoded.sub];
+      console.log('Auth Success');
+      return out;
+  } catch (error) {
+      out = [true, '']
+      return out;
+  }
+}
