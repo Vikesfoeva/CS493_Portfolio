@@ -4,6 +4,8 @@
 // TO DO
 // Need to remove planes from fares when a plane is deleted
 // Run testing suite
+// Need to add data validation
+// Add planes to be carrying fares
 
 
 const {Datastore} = require('@google-cloud/datastore');
@@ -238,7 +240,7 @@ app.get('/planes/:plane_id', async (req, res) => {
 // POST a Plane
 app.post('/planes', async (req, res) => {
   const newKey = datastore.key('planes');
-  const reqCap = req.body.capacity;
+  const reqCap = parseInt(req.body.capacity);
   const reqSerial = req.body.serialNumber;
   const reqType = req.body.type;
   const bearerToken = req.headers.authorization;
