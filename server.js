@@ -17,7 +17,8 @@ app.use(bodyParser.json());
 
 const BASEURL = 'https://lenzb-cs493-portfolio.ue.r.appspot.com/';
 
-const { auth, requiresAuth } = require('express-openid-connect');
+const { auth } = require('express-openid-connect');
+const { requiresAuth } = require('express-openid-connect');
 
 // Listen to the App Engine-specified port, or 8080 otherwise
 const PORT = process.env.PORT || 8080;
@@ -27,7 +28,7 @@ app.listen(PORT, () => {
 
 // AUTH 0 Start
 // const releaseURL = 'https://lenzb-cs493-assignment7.ue.r.appspot.com/';
-const releaseURL = 'http://localhost:8080/';
+const releaseURL = 'http://localhost:8080';
 
 const thisClientSecret = 'y0F6qLWTkdd6ihhbF_zM1r1qTHzpIPMzJ25I4fxLCtss03_iGts22fB-vdzGxLZu'
 const thisClientID = 'Nq6qNkJA5CEVqGoevLBsbRuyx7o3ZACb';
@@ -55,11 +56,44 @@ app.get('/checkAuthentication', (req, res) => {
 });
 
 app.get('/profile', requiresAuth(), async (req, res) => {
+    checkIfNewPilot(req.oidc.user);
     res.send({
         "profile": req.oidc.user,
         "jwt_Token": req.appSession.id_token
     });
 });
+
+async function checkIfNewPilot(thisUser) {
+    let query = datastore.createQuery('pilots');
+
+    const results = await datastore.runQuery(query);
+    let isNewPilot = true;
+    const thisSub = thisUser.sub;
+    const thisName = thisUser.name;
+
+    for (let i=0; i < results[0].length; i++) {
+        const thisPilot = results[0][i].sub;
+        if (thisPilot === thisSub) {
+            isNewPilot = false;
+            break;
+        }
+    }
+
+    if (!isNewPilot) {
+        return;
+    }
+  
+    const newKey = datastore.key('pilots');
+    const newEntry = {
+        key: newKey,
+        data: {
+            sub: thisSub,
+            name: thisName        }
+    }
+    await datastore.save(newEntry);
+
+    return;
+}
 
 // AUTH O END
 
@@ -71,6 +105,29 @@ app.get('/profile', requiresAuth(), async (req, res) => {
 // GET All Pilots
 // You must provide an unprotected endpoint GET /users that returns all the users currently registered in the app, even 
 // if they don't currently have any relationship with a non-user entity. The response does not need to be paginated.
+app.get('/users', async (req, res) => {
+    const accept = req.headers.accept;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+
+    const kind = 'pilots';
+    let query = datastore.createQuery(kind);
+    const results = await datastore.runQuery(query);
+
+    const outputUsers = [];
+    results[0].forEach(thisUser => {
+        outputUsers.push({
+            id: parseInt(thisUser[Datastore.KEY]['id']),
+            sub: thisUser.sub,
+            name: thisUser.name
+        })
+    });
+
+    res.status(200);
+    res.send(outputUsers);
+});
 
 
 // All protected
@@ -384,12 +441,6 @@ app.patch('/planes/:plane_id', async (req, res) => {
 // DELETE a Plane
 app.delete('/planes/:plane_id', async (req, res) => {
 
-    const accept = req.headers.accept;
-    if (accept !== 'application/json') {
-        res.status(406);
-        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
-    }
-
     const bearerToken = req.headers.authorization;
     const checkIsValid = await checkInvalidJWT(bearerToken);
     if (checkIsValid[0]) {
@@ -512,9 +563,8 @@ app.post('/fares', async (req, res) => {
     const reqFare = req.body.fare;
     const reqFlyerNum = req.body.flymilesNumber;
     const reqName = req.body.name;
-    const reqPlane = req.body.plane;
   
-    if (reqAge === undefined || reqFare === undefined || reqFlyerNum === undefined || reqName === undefined || reqPlane === undefined) {
+    if (reqAge === undefined || reqFare === undefined || reqFlyerNum === undefined || reqName === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
         res.status(400);
         return res.send(error);
@@ -526,7 +576,7 @@ app.post('/fares', async (req, res) => {
                 fare: thisFare.fare,
                 flymilesNumber: thisFare.flymilesNumber,
                 name: thisFare.name,
-                plane: thisFare.plane
+                plane: null
             }
         }
         const response = await datastore.save(newEntry);
@@ -537,7 +587,7 @@ app.post('/fares', async (req, res) => {
             fare: reqFare,
             flymilesNumber: reqFlyerNum,
             name: reqName,
-            plane: reqPlane,
+            plane: null,
             self: BASEURL + 'fares/' + newId
         }
         res.status(201);
@@ -565,6 +615,12 @@ app.put('/fares/:fare_id', async (req, res) => {
     let reqFlyerNum = req.body.flymilesNumber;
     let reqName = req.body.name;
     let reqPlane = req.body.plane;
+
+    if (!planeExists(reqPlane)) {
+        const error = {"Error":  "No plane with this plane_id exists"};
+        res.status(404);
+        return res.send(error);
+    }
 
     if (reqAge === undefined && reqFare === undefined && reqFlyerNum === undefined && reqName === undefined && reqPlane === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
@@ -636,6 +692,12 @@ app.patch('/fares/:fare_id', async (req, res) => {
     let reqName = req.body.name;
     let reqPlane = req.body.plane;
 
+    if (!planeExists(reqPlane)) {
+        const error = {"Error":  "No plane with this plane_id exists"};
+        res.status(404);
+        return res.send(error);
+    }
+
     if (reqAge === undefined && reqFare === undefined && reqFlyerNum === undefined && reqName === undefined && reqPlane === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
         res.status(400);
@@ -688,12 +750,6 @@ app.patch('/fares/:fare_id', async (req, res) => {
 // DELETE a Fares
 app.delete('/fares/:fare_id', async (req, res) => {
 
-    const accept = req.headers.accept;
-    if (accept !== 'application/json') {
-        res.status(406);
-        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
-    }
-
     try {
         const fare_id = parseInt(req.params.fare_id);
         const dataKey = datastore.key(['fares', fare_id]);
@@ -718,6 +774,16 @@ app.delete('/fares/:fare_id', async (req, res) => {
 // DELETE Fare from a Plane
 
 
+async function planeExists(planeID) {
+    try {
+        const dataKey = datastore.key(['planes', planeID]);
+        await datastore.get(dataKey);
+        return true;
+    }
+    catch (error) {
+        return false;
+    }
+}
 
 async function checkInvalidJWT(inputJwt) {
   // Decode the JWT to check validity
