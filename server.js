@@ -1,16 +1,17 @@
 // Brandon Lenz
 // CS 493 Portfolio Assignment
 
-// Imports the Google Cloud client library & create client
+// TO DO
+// Need to remove planes from fares when a plane is deleted
+// Run testing suite
+
+
 const {Datastore} = require('@google-cloud/datastore');
 const datastore = new Datastore();
-
 const jwt_decode = require('jwt-decode');
-
 const express = require('express');
 const app = express();
 const path = require('path');
-
 const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -652,10 +653,11 @@ app.put('/fares/:fare_id', async (req, res) => {
 
             const responseEntry = {
                 id: thisId,
-                capacity: reqCap,
-                owner: thisJwtOwner,
-                serialNumber: reqSerial,
-                type: reqType,
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: thisFare.plane,
                 self: BASEURL + 'fares/' + thisId
             }
 
@@ -728,10 +730,11 @@ app.patch('/fares/:fare_id', async (req, res) => {
 
             const responseEntry = {
                 id: thisId,
-                capacity: reqCap,
-                owner: thisJwtOwner,
-                serialNumber: reqSerial,
-                type: reqType,
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: thisFare.plane,
                 self: BASEURL + 'fares/' + thisId
             }
 
@@ -770,9 +773,129 @@ app.delete('/fares/:fare_id', async (req, res) => {
 
 
 // PUT Fare onto a plane
+app.put('/planes/:plane_id/fares/:fare_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const contentType = req.headers['content-type'];
+
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    let reqPlane = req.body.plane;
+    if (!planeExists(reqPlane)) {
+        const error = {"Error":  "No plane with this plane_id exists"};
+        res.status(404);
+        return res.send(error);
+    }
+
+    if (reqPlane === undefined || req.params.fare_id === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.fare_id);
+            const dataKey = datastore.key(['fares', thisId]);
+            const [thisFare] = await datastore.get(dataKey);
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    age: thisFare.age,
+                    fare: thisFare.fare,
+                    flymilesNumber: thisFare.flymilesNumber,
+                    name: thisFare.name,
+                    plane: reqPlane
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: reqPlane,
+                self: BASEURL + 'fares/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No fare with this fare_id exists"};
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
 
 // DELETE Fare from a Plane
+app.delete('/planes/fares/:fare_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const contentType = req.headers['content-type'];
 
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    if (req.params.fare_id === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.fare_id);
+            const dataKey = datastore.key(['fares', thisId]);
+            const [thisFare] = await datastore.get(dataKey);
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    age: thisFare.age,
+                    fare: thisFare.fare,
+                    flymilesNumber: thisFare.flymilesNumber,
+                    name: thisFare.name,
+                    plane: null
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: null,
+                self: BASEURL + 'fares/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No fare with this fare_id exists"};
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
 
 async function planeExists(planeID) {
     try {
