@@ -1,8 +1,6 @@
 // Brandon Lenz
 // CS 493 Portfolio Assignment
 
-// https://console.cloud.google.com/datastore/entities;kind=Boats;ns=Boats/query/kind?project=lenzb-cs493-assignment3
-
 // Imports the Google Cloud client library & create client
 const {Datastore} = require('@google-cloud/datastore');
 const datastore = new Datastore();
@@ -80,8 +78,104 @@ app.get('/profile', requiresAuth(), async (req, res) => {
 // The collection URL for an entity must implement pagination showing 5 entities at a time
 // At a minimum it must have a 'next' link on every page except the last
 // The collection must include a property that indicates how many total items are in the collection
+app.get('/planes', async (req, res) => {
+    //https://cloud.google.com/datastore/docs/concepts/queries#cursors_limits_and_offsets
+    const accept = req.headers.accept;
+    const bearerToken = req.headers.authorization;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+    const checkIsValid = await checkInvalidJWT(bearerToken);
+    if (checkIsValid[0]) {
+        const error = {"Error": "Missing or invalid JWT"};
+        res.status(401);
+        return res.send(error);
+    }
+    try {
+        const kind = 'planes';
+        const pageCursor = req.query.cursor;
+        const thisJwtOwner = checkIsValid[1];
+        let query = datastore.createQuery(kind).filter('owner', '=', thisJwtOwner).limit(5);
+        if (pageCursor) {
+            query = query.start(pageCursor)
+        }
+
+        const results = await datastore.runQuery(query);
+        const allPlanes = results[0];
+        const cursorInfo = results[1];
+
+        const outputPlanes = [];
+        allPlanes.forEach(thisPlane => {
+            outputPlanes.push({
+                id: thisPlane[Datastore.KEY]['id'],
+                capacity: thisPlane.capacity,
+                owner: thisPlane.owner,
+                serialNumber: thisPlane.serialNumber,
+                type: thisPlane.type,
+                self: BASEURL + 'planes/' + thisPlane[Datastore.KEY]['id']
+            })
+        });
+        
+        const response = {planes: outputPlanes};
+        if (cursorInfo.moreResults === 'NO_MORE_RESULTS') {
+            response['next'] = null;
+        } else {
+            // https://stackoverflow.com/questions/67260882/using-datastores-pagination-example-causes-error-13-internal-request-messag
+            // Answer by Ralemos solved the cursor containint URL protected characters
+            response['next'] = BASEURL + 'planes/?cursor=' + encodeURIComponent(cursorInfo.endCursor)
+        }
+
+        res.status(200);
+        res.send(response);
+    } 
+    catch (error) {
+        console.log(error);
+        res.status(404);
+        res.send({"Error": "An error has occured, ensure you sent a valid cursor"})
+    }
+});
 
 // GET One Plane
+app.get('/planes/:plane_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const bearerToken = req.headers.authorization;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+    const checkIsValid = await checkInvalidJWT(bearerToken);
+    if (checkIsValid[0]) {
+        const error = {"Error": "Missing or invalid JWT"};
+        res.status(401);
+        return res.send(error);
+    }
+    
+    try {
+        const thisId = parseInt(req.params.plane_id);
+        const dataKey = datastore.key(['planes', thisId])
+        const [thisPlane] = await datastore.get(dataKey);
+        const thisJwtOwner = checkIsValid[1];
+        if (thisJwtOwner !== thisPlane.owner) {
+            throw error();
+        }
+        const response = {
+            id: thisId,
+            capacity: thisPlane.capacity,
+            owner: thisPlane.owner,
+            serialNumber: thisPlane.serialNumber,
+            type: thisPlane.type,
+            self: BASEURL + 'planes/' + thisId
+        }
+        res.status(200);
+        return res.send(response);
+    }
+    catch {
+        const error = {"Error":  "No plane with this plane_id exists or it is owned by someone else"};
+        res.status(404);
+        return res.send(error);
+    }
+});
 
 // POST a Plane
 app.post('/planes', async (req, res) => {
@@ -109,9 +203,9 @@ app.post('/planes', async (req, res) => {
           key: newKey,
           data: {
               capacity: reqCap,
-              owner: reqType,
+              owner: reqOwner,
               serialNumber: reqSerial,
-              type: reqOwner
+              type: reqType
           }
       }
       const response = await datastore.save(newEntry);
@@ -119,9 +213,9 @@ app.post('/planes', async (req, res) => {
       const newEntryRes = {
           id: newId,
           capacity: reqCap,
-          owner: reqType,
+          owner: reqOwner,
           serialNumber: reqSerial,
-          type: reqOwner,
+          type: reqType,
           self: BASEURL + 'planes/' + newId
       }
       res.status(201);
@@ -130,33 +224,500 @@ app.post('/planes', async (req, res) => {
 });
 
 // PUT a Plane
+app.put('/planes/:plane_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const bearerToken = req.headers.authorization;
+    const contentType = req.headers['content-type'];
+
+    const checkIsValid = await checkInvalidJWT(bearerToken);
+    if (checkIsValid[0]) {
+        const error = {"Error": "Missing or invalid JWT"};
+        res.status(401);
+        return res.send(error);
+    }
+  
+    const thisJwtOwner = checkIsValid[1];
+
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    let reqCap = req.body.capacity;
+    let reqSerial = req.body.serialNumber;
+    let reqType = req.body.type;
+
+    if (reqCap === undefined && reqSerial === undefined && reqType === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.plane_id);
+            const dataKey = datastore.key(['planes', thisId]);
+            const [thisPlane] = await datastore.get(dataKey);
+        
+            if (reqCap === undefined) {reqCap = null};
+            if (reqSerial === undefined) {reqSerial = null};
+            if (reqType === undefined) {reqType = null};
+
+            if (thisJwtOwner !== thisPlane.owner) {
+                throw error();
+            }
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    capacity: reqCap,
+                    owner: thisJwtOwner,
+                    serialNumber: reqSerial,
+                    type: reqType
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                capacity: reqCap,
+                owner: thisJwtOwner,
+                serialNumber: reqSerial,
+                type: reqType,
+                self: BASEURL + 'planes/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No plane with this plane_id exists or is not owned by this user"}
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
 
 // Patch a Plane
+app.patch('/planes/:plane_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const bearerToken = req.headers.authorization;
+    const contentType = req.headers['content-type'];
+
+    const checkIsValid = await checkInvalidJWT(bearerToken);
+    if (checkIsValid[0]) {
+        const error = {"Error": "Missing or invalid JWT"};
+        res.status(401);
+        return res.send(error);
+    }
+  
+    const thisJwtOwner = checkIsValid[1];
+
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    let reqCap = req.body.capacity;
+    let reqSerial = req.body.serialNumber;
+    let reqType = req.body.type;
+
+    if (reqCap === undefined && reqSerial === undefined && reqType === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.plane_id);
+            const dataKey = datastore.key(['planes', thisId]);
+            const [thisPlane] = await datastore.get(dataKey);
+        
+            if (reqCap === undefined) {reqCap = thisPlane.capacity};
+            if (reqSerial === undefined) {reqSerial = thisPlane.serialNumber};
+            if (reqType === undefined) {reqType = thisPlane.type};
+
+            if (thisJwtOwner !== thisPlane.owner) {
+                throw error();
+            }
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    capacity: reqCap,
+                    owner: thisJwtOwner,
+                    serialNumber: reqSerial,
+                    type: reqType
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                capacity: reqCap,
+                owner: thisJwtOwner,
+                serialNumber: reqSerial,
+                type: reqType,
+                self: BASEURL + 'planes/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No plane with this plane_id exists or is not owned by this user"}
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
 
 // DELETE a Plane
+app.delete('/planes/:plane_id', async (req, res) => {
+
+    const accept = req.headers.accept;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+
+    const bearerToken = req.headers.authorization;
+    const checkIsValid = await checkInvalidJWT(bearerToken);
+    if (checkIsValid[0]) {
+        const error = {"Error": "Missing or invalid JWT"};
+        res.status(401);
+        return res.send(error);
+    }
+
+    try {
+        const planeId = parseInt(req.params.plane_id);
+        const dataKey = datastore.key(['planes', planeId]);
+        const [thisPlane] = await datastore.get(dataKey);
+        const thisJwtOwner = checkIsValid[1];
+
+        if (thisJwtOwner !== thisPlane.owner) { throw error(); }
+        if (thisPlane === undefined) { throw new error('error'); }
+
+        await datastore.delete(dataKey);
+        res.status(204);
+        res.send();
+    }
+    catch {
+        const error = {"Error":  "No plane with this plane_id exists or it is owned by someone else"};
+        res.status(404);
+        return res.send(error);
+    }
+});
 
 
-// All protected
-// GET All Ticket
-// The collection URL for an entity must implement pagination showing 5 entities at a time
-// At a minimum it must have a 'next' link on every page except the last
-// The collection must include a property that indicates how many total items are in the collection
+// GET All Fares
+app.get('/fares', async (req, res) => {
+    const accept = req.headers.accept;
 
-// GET One Ticket
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
 
-// POST a Ticket
+    try {
+        const kind = 'fares';
+        const pageCursor = req.query.cursor;
+        let query = datastore.createQuery(kind).limit(5);
+        if (pageCursor) {
+            query = query.start(pageCursor)
+        }
 
-// PUT a Ticket
+        const results = await datastore.runQuery(query);
+        const allFares = results[0];
+        const cursorInfo = results[1];
 
-// Patch a Ticket
+        const outputFares = [];
+        allFares.forEach(thisFare => {
+            outputFares.push({
+                id: thisFare[Datastore.KEY]['id'],
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: thisFare.plane,
+                self: BASEURL + 'fares/' + thisFare[Datastore.KEY]['id']
+            })
+        });
+        
+        const response = {fares: outputFares};
+        if (cursorInfo.moreResults === 'NO_MORE_RESULTS') {
+            response['next'] = null;
+        } else {
+            // https://stackoverflow.com/questions/67260882/using-datastores-pagination-example-causes-error-13-internal-request-messag
+            // Answer by Ralemos solved the cursor containint URL protected characters
+            response['next'] = BASEURL + 'fares/?cursor=' + encodeURIComponent(cursorInfo.endCursor)
+        }
 
-// DELETE a Ticket
+        res.status(200);
+        res.send(response);
+    } 
+    catch (error) {
+        console.log(error);
+        res.status(404);
+        res.send({"Error": "An error has occured, ensure you sent a valid cursor"})
+    }
+});
+
+// GET One Fares
+app.get('/fares/:fare_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const bearerToken = req.headers.authorization;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+    
+    try {
+        const thisId = parseInt(req.params.fare_id);
+        const dataKey = datastore.key(['fares', thisId])
+        const [thisFare] = await datastore.get(dataKey);
+
+        const response = {
+            id: thisId,
+            age: thisFare.age,
+            fare: thisFare.fare,
+            flymilesNumber: thisFare.flymilesNumber,
+            name: thisFare.name,
+            plane: thisFare.plane,
+            self: BASEURL + 'fares/' + thisId
+        }
+        res.status(200);
+        return res.send(response);
+    }
+    catch {
+        const error = {"Error":  "No fare with this fare_id exists"};
+        res.status(404);
+        return res.send(error);
+    }
+});
+
+// POST a Fares
+app.post('/fares', async (req, res) => {
+    const newKey = datastore.key('fares');
+    const reqAge = req.body.age;
+    const reqFare = req.body.fare;
+    const reqFlyerNum = req.body.flymilesNumber;
+    const reqName = req.body.name;
+    const reqPlane = req.body.plane;
+  
+    if (reqAge === undefined || reqFare === undefined || reqFlyerNum === undefined || reqName === undefined || reqPlane === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        const newEntry = {
+            key: newKey,
+            data: {
+                age: thisFare.age,
+                fare: thisFare.fare,
+                flymilesNumber: thisFare.flymilesNumber,
+                name: thisFare.name,
+                plane: thisFare.plane
+            }
+        }
+        const response = await datastore.save(newEntry);
+        const newId = parseInt(response[0]['mutationResults'][0]['key']['path'][0]['id']);
+        const newEntryRes = {
+            id: newId,
+            age: reqAge,
+            fare: reqFare,
+            flymilesNumber: reqFlyerNum,
+            name: reqName,
+            plane: reqPlane,
+            self: BASEURL + 'fares/' + newId
+        }
+        res.status(201);
+        return res.send(newEntryRes);
+    }
+  });
+
+// PUT a Fares
+app.put('/fares/:fare_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const contentType = req.headers['content-type'];
+
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    let reqAge = req.body.age;
+    let reqFare = req.body.fare;
+    let reqFlyerNum = req.body.flymilesNumber;
+    let reqName = req.body.name;
+    let reqPlane = req.body.plane;
+
+    if (reqAge === undefined && reqFare === undefined && reqFlyerNum === undefined && reqName === undefined && reqPlane === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.fare_id);
+            const dataKey = datastore.key(['fares', thisId]);
+            const [thisFare] = await datastore.get(dataKey);
+        
+            if (reqAge === undefined) {reqAge = null};
+            if (reqFare === undefined) {reqFare = null};
+            if (reqFlyerNum === undefined) {reqFlyerNum = null};
+            if (reqName === undefined) {reqName = null};
+            if (reqPlane === undefined) {reqPlane = null};
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    age: thisFare.age,
+                    fare: thisFare.fare,
+                    flymilesNumber: thisFare.flymilesNumber,
+                    name: thisFare.name,
+                    plane: thisFare.plane
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                capacity: reqCap,
+                owner: thisJwtOwner,
+                serialNumber: reqSerial,
+                type: reqType,
+                self: BASEURL + 'fares/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No fare with this fare_id exists"};
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
+
+// Patch a Fares
+app.patch('/fares/:fare_id', async (req, res) => {
+    const accept = req.headers.accept;
+    const contentType = req.headers['content-type'];
+
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type"})
+    }
+
+    if (contentType !== 'application/json') {
+        res.status(415);
+        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
+    }
+
+    let reqAge = req.body.age;
+    let reqFare = req.body.fare;
+    let reqFlyerNum = req.body.flymilesNumber;
+    let reqName = req.body.name;
+    let reqPlane = req.body.plane;
+
+    if (reqAge === undefined && reqFare === undefined && reqFlyerNum === undefined && reqName === undefined && reqPlane === undefined) {
+        const error = {"Error":  "The request object is missing at least one of the required attributes"}
+        res.status(400);
+        return res.send(error);
+    } else {
+        try {
+            const thisId = parseInt(req.params.fare_id);
+            const dataKey = datastore.key(['fares', thisId]);
+            const [thisFare] = await datastore.get(dataKey);
+        
+            if (reqAge === undefined) {reqAge = thisFare.age};
+            if (reqFare === undefined) {reqFare = thisFare.fare};
+            if (reqFlyerNum === undefined) {reqFlyerNum = thisFare.flymilesNumber};
+            if (reqName === undefined) {reqName = thisFare.name};
+            if (reqPlane === undefined) {reqPlane = thisFare.plane};
+
+            const entry = {
+                key: dataKey,
+                data: {
+                    age: thisFare.age,
+                    fare: thisFare.fare,
+                    flymilesNumber: thisFare.flymilesNumber,
+                    name: thisFare.name,
+                    plane: thisFare.plane
+                }
+            }
+            await datastore.update(entry);
+
+            const responseEntry = {
+                id: thisId,
+                capacity: reqCap,
+                owner: thisJwtOwner,
+                serialNumber: reqSerial,
+                type: reqType,
+                self: BASEURL + 'fares/' + thisId
+            }
+
+            res.status(200);
+            return res.send(responseEntry);
+        }
+        catch (error) {
+            console.log(error);
+            const errorMsg = {"Error":  "No fare with this fare_id exists"};
+            res.status(404);
+            return res.send(errorMsg);
+        }
+    }
+});
+
+// DELETE a Fares
+app.delete('/fares/:fare_id', async (req, res) => {
+
+    const accept = req.headers.accept;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
+
+    try {
+        const fare_id = parseInt(req.params.fare_id);
+        const dataKey = datastore.key(['fares', fare_id]);
+        const [thisFare] = await datastore.get(dataKey);
+
+        if (thisFare === undefined) { throw new error('error'); }
+
+        await datastore.delete(dataKey);
+        res.status(204);
+        res.send();
+    }
+    catch {
+        const errorMsg = {"Error":  "No fare with this fare_id exists"};
+        res.status(404);
+        return res.send(error);
+    }
+});
 
 
+// PUT Fare onto a plane
 
-// PUT Passenger onto a plane
+// DELETE Fare from a Plane
 
-// DELETE Passenger from a Plane
+
 
 async function checkInvalidJWT(inputJwt) {
   // Decode the JWT to check validity
@@ -166,7 +727,6 @@ async function checkInvalidJWT(inputJwt) {
       const tokenComponent = inputJwt.split(" ")[1];
       const decoded = jwt_decode(tokenComponent);
       const out = [false, decoded.sub];
-      console.log('Auth Success');
       return out;
   } catch (error) {
       out = [true, '']
