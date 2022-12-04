@@ -715,7 +715,6 @@ app.put('/fares/:fare_id', async (req, res) => {
         try {
             const thisId = parseInt(req.params.fare_id);
             const dataKey = datastore.key(['fares', thisId]);
-            const [thisFare] = await datastore.get(dataKey);
             
             if (reqAge === undefined) {reqAge = null};
             if (reqFare === undefined) {reqFare = null};
@@ -726,22 +725,22 @@ app.put('/fares/:fare_id', async (req, res) => {
             const entry = {
                 key: dataKey,
                 data: {
-                    age: thisFare.age,
-                    fare: thisFare.fare,
-                    flymilesNumber: thisFare.flymilesNumber,
-                    name: thisFare.name,
-                    plane: thisFare.plane
+                    age: reqAge,
+                    fare: reqFare,
+                    flymilesNumber: reqFlyerNum,
+                    name: reqName,
+                    plane: reqPlane
                 }
             }
             await datastore.update(entry);
 
             const responseEntry = {
                 id: thisId,
-                age: thisFare.age,
-                fare: thisFare.fare,
-                flymilesNumber: thisFare.flymilesNumber,
-                name: thisFare.name,
-                plane: thisFare.plane,
+                age: reqAge,
+                fare: reqFare,
+                flymilesNumber: reqFlyerNum,
+                name: reqName,
+                plane: reqPlane,
                 self: BASEURL + 'fares/' + thisId
             }
 
@@ -778,17 +777,17 @@ app.patch('/fares/:fare_id', async (req, res) => {
     let reqName = req.body.name;
     let reqPlane = req.body.plane;
 
-    if (isInvalidInteger(reqAge)) {
+    if (isInvalidInteger(reqAge) && reqAge !== undefined) {
         res.status(403);
         const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
-    if (isInvalidInteger(reqFare)) {
+    if (isInvalidInteger(reqFare) && reqFare !== undefined) {
         res.status(403);
         const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
-    if (isInvalidInteger(reqFlyerNum)) {
+    if (isInvalidInteger(reqFlyerNum) && reqFlyerNum !== undefined) {
         res.status(403);
         const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
@@ -812,32 +811,32 @@ app.patch('/fares/:fare_id', async (req, res) => {
             const thisId = parseInt(req.params.fare_id);
             const dataKey = datastore.key(['fares', thisId]);
             const [thisFare] = await datastore.get(dataKey);
-        
-            if (reqAge === undefined) {reqAge = thisFare.age};
-            if (reqFare === undefined) {reqFare = thisFare.fare};
-            if (reqFlyerNum === undefined) {reqFlyerNum = thisFare.flymilesNumber};
+            if (reqAge === undefined || isNaN(reqAge)) {reqAge = thisFare.age};
+            if (reqFare === undefined || isNaN(reqFare)) {reqFare = thisFare.fare};
+            if (reqFlyerNum === undefined || isNaN(reqFlyerNum)) {reqFlyerNum = thisFare.flymilesNumber};
             if (reqName === undefined) {reqName = thisFare.name};
             if (reqPlane === undefined) {reqPlane = thisFare.plane};
 
             const entry = {
                 key: dataKey,
                 data: {
-                    age: thisFare.age,
-                    fare: thisFare.fare,
-                    flymilesNumber: thisFare.flymilesNumber,
-                    name: thisFare.name,
-                    plane: thisFare.plane
+                    age: reqAge,
+                    fare: reqFare,
+                    flymilesNumber: reqFlyerNum,
+                    name: reqName,
+                    plane: reqPlane
                 }
             }
+
             await datastore.update(entry);
 
             const responseEntry = {
                 id: thisId,
-                age: thisFare.age,
-                fare: thisFare.fare,
-                flymilesNumber: thisFare.flymilesNumber,
-                name: thisFare.name,
-                plane: thisFare.plane,
+                age: reqAge,
+                fare: reqFare,
+                flymilesNumber: reqFlyerNum,
+                name: reqName,
+                plane: reqPlane,
                 self: BASEURL + 'fares/' + thisId
             }
 
