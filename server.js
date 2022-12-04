@@ -3,10 +3,6 @@
 
 // TO DO
 // Need to remove planes from fares when a plane is deleted
-// Run testing suite
-// Need to add data validation
-// Add planes to be carrying fares
-
 
 const {Datastore} = require('@google-cloud/datastore');
 const datastore = new Datastore();
@@ -262,12 +258,13 @@ app.post('/planes', async (req, res) => {
 
   if (isInvalidInteger(reqCap)) {
     res.status(403);
-    const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999"};
+    const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999999"};
     return res.send(errorMsg);
   }
+
   if (isInvalidInteger(reqSerial)) {
     res.status(403);
-    const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999"};
+    const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999999"};
     return res.send(errorMsg);
   }
   reqCap = parseInt(reqCap);
@@ -326,12 +323,12 @@ app.put('/planes/:plane_id', async (req, res) => {
 
     if (isInvalidInteger(reqCap) && reqCap !== undefined) {
         res.status(403);
-        const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqSerial) && reqSerial !== undefined) {
         res.status(403);
-        const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
 
@@ -428,12 +425,12 @@ app.patch('/planes/:plane_id', async (req, res) => {
 
     if (isInvalidInteger(reqCap) && reqCap !== undefined) {
         res.status(403);
-        const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Capacity must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqSerial) && reqSerial !== undefined) {
         res.status(403);
-        const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Serial Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
 
@@ -620,17 +617,17 @@ app.post('/fares', async (req, res) => {
 
     if (isInvalidInteger(reqAge)) {
         res.status(403);
-        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFare)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFlyerNum)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     reqAge = parseInt(reqAge);
@@ -685,17 +682,17 @@ app.put('/fares/:fare_id', async (req, res) => {
 
     if (isInvalidInteger(reqAge)) {
         res.status(403);
-        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFare)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFlyerNum)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     reqAge = parseInt(reqAge);
@@ -781,17 +778,17 @@ app.patch('/fares/:fare_id', async (req, res) => {
 
     if (isInvalidInteger(reqAge)) {
         res.status(403);
-        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Age must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFare)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fare must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     if (isInvalidInteger(reqFlyerNum)) {
         res.status(403);
-        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999"};
+        const errorMsg = {"Error" : "Fly Miles Number must be an integer inclusively between 1 and 999999999"};
         return res.send(errorMsg);
     }
     reqAge = parseInt(reqAge);
@@ -871,7 +868,7 @@ app.delete('/fares/:fare_id', async (req, res) => {
     catch {
         const errorMsg = {"Error":  "No fare with this fare_id exists"};
         res.status(404);
-        return res.send(error);
+        return res.send(errorMsg);
     }
 });
 
@@ -879,32 +876,28 @@ app.delete('/fares/:fare_id', async (req, res) => {
 // PUT Fare onto a plane
 app.put('/planes/:plane_id/fares/:fare_id', async (req, res) => {
     const accept = req.headers.accept;
-    const contentType = req.headers['content-type'];
-
+    const fareId = req.params.fare_id;
     if (accept !== 'application/json') {
         res.status(406);
         return res.send({"Error" : "Invalid Conent Type"})
     }
 
-    if (contentType !== 'application/json') {
-        res.status(415);
-        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
-    }
-
-    let reqPlane = req.body.plane;
+    let reqPlane = req.params.plane_id;
     if (!planeExists(reqPlane)) {
         const error = {"Error":  "No plane with this plane_id exists"};
         res.status(404);
         return res.send(error);
     }
 
-    if (reqPlane === undefined || req.params.fare_id === undefined) {
+    reqPlane = parseInt(reqPlane);
+
+    if (reqPlane === undefined || fareId === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
         res.status(400);
         return res.send(error);
     } else {
         try {
-            const thisId = parseInt(req.params.fare_id);
+            const thisId = parseInt(fareId);
             const dataKey = datastore.key(['fares', thisId]);
             const [thisFare] = await datastore.get(dataKey);
 
@@ -945,16 +938,10 @@ app.put('/planes/:plane_id/fares/:fare_id', async (req, res) => {
 // DELETE Fare from a Plane
 app.delete('/planes/fares/:fare_id', async (req, res) => {
     const accept = req.headers.accept;
-    const contentType = req.headers['content-type'];
 
     if (accept !== 'application/json') {
         res.status(406);
         return res.send({"Error" : "Invalid Conent Type"})
-    }
-
-    if (contentType !== 'application/json') {
-        res.status(415);
-        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
     }
 
     if (req.params.fare_id === undefined) {
@@ -1055,10 +1042,10 @@ async function checkInvalidJWT(inputJwt) {
   }
 }
 
-function isInvalidInteger(newBoatLength) {
+function isInvalidInteger(thisTestInt) {
     try {
-        const thisInt = parseInt(newBoatLength);
-        return (thisInt < 1) || (999999 <= thisInt)
+        const thisInt = parseInt(thisTestInt);
+        return thisInt < 1 || 999999999 <= thisInt || isNaN(thisInt);
     }
     catch (err) {
         console.log(err);
