@@ -240,10 +240,16 @@ app.get('/planes/:plane_id', async (req, res) => {
 // POST a Plane
 app.post('/planes', async (req, res) => {
   const newKey = datastore.key('planes');
-  const reqCap = parseInt(req.body.capacity);
-  const reqSerial = req.body.serialNumber;
+  let reqCap = req.body.capacity;
+  let reqSerial = req.body.serialNumber;
   const reqType = req.body.type;
   const bearerToken = req.headers.authorization;
+
+  const accept = req.headers.accept;
+  if (accept !== 'application/json') {
+    res.status(406);
+    return res.send({"Error" : "Invalid Conent Type"})
+}
 
   const checkIsValid = await checkInvalidJWT(bearerToken);
   if (checkIsValid[0]) {
@@ -253,6 +259,19 @@ app.post('/planes', async (req, res) => {
   }
 
   const reqOwner = checkIsValid[1];
+
+  if (isInvalidInteger(reqCap)) {
+    res.status(403);
+    const errorMsg = {"Error" : "Capacity must be an integer"};
+    return res.send(errorMsg);
+  }
+  if (isInvalidInteger(reqSerial)) {
+    res.status(403);
+    const errorMsg = {"Error" : "Serial Number must be an integer"};
+    return res.send(errorMsg);
+  }
+  reqCap = parseInt(reqCap);
+  reqSerial = parseInt(reqSerial);
 
   if (reqCap === undefined || reqSerial === undefined || reqType === undefined) {
       const error = {"Error":  "The request object is missing at least one of the required attributes"}
@@ -303,13 +322,20 @@ app.put('/planes/:plane_id', async (req, res) => {
         return res.send({"Error" : "Invalid Conent Type"})
     }
 
-    if (contentType !== 'application/json') {
-        res.status(415);
-        return res.send({"Error" : "Invalid Content-Type sent, must be application/json"});
-    }
-
     let reqCap = req.body.capacity;
     let reqSerial = req.body.serialNumber;
+
+    if (isInvalidInteger(reqCap) && reqCap !== undefined) {
+        res.status(403);
+        const errorMsg = {"Error" : "Capacity must be an integer"};
+        return res.send(errorMsg);
+    }
+    if (isInvalidInteger(reqSerial) && reqSerial !== undefined) {
+        res.status(403);
+        const errorMsg = {"Error" : "Serial Number must be an integer"};
+        return res.send(errorMsg);
+    }
+
     let reqType = req.body.type;
 
     if (reqCap === undefined && reqSerial === undefined && reqType === undefined) {
@@ -322,8 +348,18 @@ app.put('/planes/:plane_id', async (req, res) => {
             const dataKey = datastore.key(['planes', thisId]);
             const [thisPlane] = await datastore.get(dataKey);
         
-            if (reqCap === undefined) {reqCap = null};
-            if (reqSerial === undefined) {reqSerial = null};
+            if (reqCap === undefined) {
+                reqCap = null
+            } else {
+                reqCap = parseInt(reqCap);
+            };
+
+            if (reqSerial === undefined) {
+                reqSerial = null
+            } else {
+                reqSerial = parseInt(reqSerial);
+            };
+
             if (reqType === undefined) {reqType = null};
 
             if (thisJwtOwner !== thisPlane.owner) {
@@ -390,6 +426,17 @@ app.patch('/planes/:plane_id', async (req, res) => {
     let reqCap = req.body.capacity;
     let reqSerial = req.body.serialNumber;
     let reqType = req.body.type;
+
+    if (isInvalidInteger(reqCap) && reqCap !== undefined) {
+        res.status(403);
+        const errorMsg = {"Error" : "Capacity must be an integer"};
+        return res.send(errorMsg);
+    }
+    if (isInvalidInteger(reqSerial) && reqSerial !== undefined) {
+        res.status(403);
+        const errorMsg = {"Error" : "Serial Number must be an integer"};
+        return res.send(errorMsg);
+    }
 
     if (reqCap === undefined && reqSerial === undefined && reqType === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
@@ -529,7 +576,6 @@ app.get('/fares', async (req, res) => {
 // GET One Fares
 app.get('/fares/:fare_id', async (req, res) => {
     const accept = req.headers.accept;
-    const bearerToken = req.headers.authorization;
     if (accept !== 'application/json') {
         res.status(406);
         return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
@@ -562,10 +608,16 @@ app.get('/fares/:fare_id', async (req, res) => {
 // POST a Fares
 app.post('/fares', async (req, res) => {
     const newKey = datastore.key('fares');
-    const reqAge = req.body.age;
-    const reqFare = req.body.fare;
-    const reqFlyerNum = req.body.flymilesNumber;
+    const reqAge = parseInt(req.body.age);
+    const reqFare = parseFloat(req.body.fare);
+    const reqFlyerNum = parseInt(req.body.flymilesNumber);
     const reqName = req.body.name;
+
+    const accept = req.headers.accept;
+    if (accept !== 'application/json') {
+        res.status(406);
+        return res.send({"Error" : "Invalid Conent Type - please specify 'application/json'"})
+    }
   
     if (reqAge === undefined || reqFare === undefined || reqFlyerNum === undefined || reqName === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
@@ -575,10 +627,10 @@ app.post('/fares', async (req, res) => {
         const newEntry = {
             key: newKey,
             data: {
-                age: thisFare.age,
-                fare: thisFare.fare,
-                flymilesNumber: thisFare.flymilesNumber,
-                name: thisFare.name,
+                age: reqAge,
+                fare: reqFare,
+                flymilesNumber: reqFlyerNum,
+                name: reqName,
                 plane: null
             }
         }
@@ -899,6 +951,34 @@ app.delete('/planes/fares/:fare_id', async (req, res) => {
     }
 });
 
+// Invalid Paths
+const invalidPathMessage = {"Error" : "This method is not allowed for this URL."}
+
+app.post('/users', (req, res) => {
+    res.status(405);
+    return res.send(invalidPathMessage);
+});
+
+app.delete('/users', (req, res) => {
+    res.status(405);
+    return res.send(invalidPathMessage);
+});
+
+app.put('/users', (req, res) => {
+    res.status(405);
+    return res.send(invalidPathMessage);
+});
+
+app.patch('/users', (req, res) => {
+    res.status(405);
+    return res.send(invalidPathMessage);
+});
+
+app.get('*', function(req, res){
+    res.status(404);
+    return({"Error": "This resource not found"})
+})
+
 async function planeExists(planeID) {
     try {
         const dataKey = datastore.key(['planes', planeID]);
@@ -923,4 +1003,15 @@ async function checkInvalidJWT(inputJwt) {
       out = [true, '']
       return out;
   }
+}
+
+function isInvalidInteger(newBoatLength) {
+    try {
+        const thisInt = parseInt(newBoatLength);
+        return (thisInt < 1) || (10000 <= thisInt)
+    }
+    catch (err) {
+        console.log(err);
+        return true;
+    }
 }
