@@ -2,7 +2,7 @@
 // CS 493 Portfolio Assignment
 
 // TO DO
-// Need to remove planes from fares when a plane is deleted
+// Test PUT and PATCH fare
 
 const {Datastore} = require('@google-cloud/datastore');
 const datastore = new Datastore();
@@ -343,7 +343,6 @@ app.put('/planes/:plane_id', async (req, res) => {
             const thisId = parseInt(req.params.plane_id);
             const dataKey = datastore.key(['planes', thisId]);
             const [thisPlane] = await datastore.get(dataKey);
-        
             if (reqCap === undefined) {
                 reqCap = null
             } else {
@@ -501,10 +500,13 @@ app.delete('/planes/:plane_id', async (req, res) => {
         const [thisPlane] = await datastore.get(dataKey);
         const thisJwtOwner = checkIsValid[1];
 
-        if (thisJwtOwner !== thisPlane.owner) { throw error(); }
+        if (thisJwtOwner !== thisPlane.owner) { 
+            throw error(); 
+        }
         if (thisPlane === undefined) { throw new error('error'); }
-
+        await checkFaresDeletedPlane(planeId);
         await datastore.delete(dataKey);
+        
         res.status(204);
         res.send();
     }
@@ -714,7 +716,7 @@ app.put('/fares/:fare_id', async (req, res) => {
             const thisId = parseInt(req.params.fare_id);
             const dataKey = datastore.key(['fares', thisId]);
             const [thisFare] = await datastore.get(dataKey);
-        
+            
             if (reqAge === undefined) {reqAge = null};
             if (reqFare === undefined) {reqFare = null};
             if (reqFlyerNum === undefined) {reqFlyerNum = null};
@@ -1025,6 +1027,38 @@ async function planeExists(planeID) {
     catch (error) {
         return false;
     }
+}
+
+async function checkFaresDeletedPlane(deletedPlane) {
+    try {
+        const kind = 'fares';
+        const query = datastore.createQuery(kind);
+        const results = await datastore.runQuery(query);
+    
+        for (let i=0; i < results[0].length; i++) {
+            const thisFare = results[0][i];
+            const thisId = thisFare[Datastore.KEY]['id'];
+            if (thisFare.plane === deletedPlane) {
+      
+                const dataKey = datastore.key([kind, parseInt(thisId)]);
+                const entry = {
+                    key: dataKey,
+                    data: {
+                        age: thisFare.age,
+                        fare: thisFare.fare,
+                        flymilesNumber: thisFare.flymilesNumber,
+                        name: thisFare.name,
+                        plane: null
+                    }
+                }
+                await datastore.update(entry);
+                break;
+            }
+        }
+    } catch (err) {
+        console.log(err);
+    }
+
 }
 
 async function checkInvalidJWT(inputJwt) {
