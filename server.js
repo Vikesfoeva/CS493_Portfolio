@@ -26,8 +26,8 @@ app.listen(PORT, () => {
 });
 
 // AUTH 0 Start
-// const releaseURL = 'https://lenzb-cs493-assignment7.ue.r.appspot.com/';
-const releaseURL = 'http://localhost:8080';
+const releaseURL = 'https://lenzb-cs493-assignment7.ue.r.appspot.com/';
+// const releaseURL = 'http://localhost:8080';
 
 const thisClientSecret = 'y0F6qLWTkdd6ihhbF_zM1r1qTHzpIPMzJ25I4fxLCtss03_iGts22fB-vdzGxLZu'
 const thisClientID = 'Nq6qNkJA5CEVqGoevLBsbRuyx7o3ZACb';
