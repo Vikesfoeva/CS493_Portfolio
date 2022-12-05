@@ -188,7 +188,7 @@ app.get('/planes', async (req, res) => {
     catch (error) {
         console.log(error);
         res.status(404);
-        res.send({"Error": "An error has occured, ensure you sent a valid cursor"})
+        res.send({"Error": "An error has occurred, ensure you sent a valid cursor"})
     }
 });
 
@@ -244,7 +244,7 @@ app.post('/planes', async (req, res) => {
   const accept = req.headers.accept;
   if (accept !== 'application/json') {
     res.status(406);
-    return res.send({"Error" : "Invalid Conent Type"})
+    return res.send({"Error" : "Invalid MIME type in Accept header, must be application/json"})
 }
 
   const checkIsValid = await checkInvalidJWT(bearerToken);
@@ -334,7 +334,7 @@ app.put('/planes/:plane_id', async (req, res) => {
 
     let reqType = req.body.type;
 
-    if (reqCap === undefined && reqSerial === undefined && reqType === undefined) {
+    if (reqCap === undefined || reqSerial === undefined || reqType === undefined) {
         const error = {"Error":  "The request object is missing at least one of the required attributes"}
         res.status(400);
         return res.send(error);
